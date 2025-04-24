@@ -1,0 +1,68 @@
+<%- include('partials/header') %>
+
+<div class="container home-container">
+  <section class="intro">
+    <h2>check which tiktok users are currently live</h2>
+    <p>simple api to check tiktok live status with obs integration</p>
+  </section>
+
+  <section class="endpoints">
+    <div class="endpoint-card">
+      <h3>check endpoint</h3>
+      <p>get a plain text list of live users</p>
+      <div class="endpoint-example">
+        <code>/check?users=user1,user2,user3</code>
+      </div>
+      <div class="try-form">
+        <form action="/check" method="get" id="check-form">
+          <label for="check-users">users (comma separated):</label>
+          <input type="text" id="check-users" name="users" placeholder="user1,user2,user3" required>
+          <button type="submit">try it</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="endpoint-card">
+      <h3>obs integration</h3>
+      <p>automatically control obs when users go live</p>
+      <div class="endpoint-example">
+        <code>/obs?users=user1,user2,user3&mode=stream&reloadInterval=10</code>
+      </div>
+      <div class="try-form">
+        <form action="/obs" method="get" id="obs-form">
+          <label for="obs-users">users (comma separated):</label>
+          <input type="text" id="obs-users" name="users" placeholder="user1,user2,user3" required>
+          
+          <label for="obs-mode">mode:</label>
+          <select id="obs-mode" name="mode">
+            <option value="stream">streaming</option>
+            <option value="record">recording</option>
+          </select>
+          
+          <label for="reload-interval">reload interval (seconds):</label>
+          <input type="number" id="reload-interval" name="reloadInterval" placeholder="10" min="0">
+          
+          <button type="submit">try it</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <section class="instructions">
+    <h3>how to use with obs:</h3>
+    <ol>
+      <li>add a browser source in obs</li>
+      <li>set url to this site with your users: <code>http://your-server/obs?users=user1,user2,user3&reloadInterval=10</code></li>
+      <li>
+        <strong>important:</strong> enable <strong>"Full access to OBS"</strong> in browser source properties
+        <div class="obs-screenshot">
+          <img src="/img/obshowto.png" alt="OBS settings screenshot showing 'Full access to OBS' option" />
+          <p class="caption">Select "Full access to OBS" as shown above</p>
+        </div>
+      </li>
+      <li>it will auto start/stop when users go live</li>
+    </ol>
+  </section>
+</div>
+
+<%- include('partials/footer') %> 

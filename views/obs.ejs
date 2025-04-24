@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TikTok Live Auto-<%= mode === 'record' ? 'Recording' : 'Streaming' %></title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background-color: #000;
+      color: #fff;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    .status-container {
+      margin-bottom: 10px;
+    }
+    .log-container {
+      flex: 1;
+      overflow-y: auto;
+      background-color: rgba(0, 0, 0, 0.3);
+      border-radius: 5px;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+    .log-entry {
+      margin-bottom: 5px;
+      font-family: monospace;
+    }
+    .timestamp {
+      color: #888;
+    }
+    .success { color: #4CAF50; }
+    .error { color: #F44336; }
+    .warning { color: #FF9800; }
+    .info { color: #2196F3; }
+    .recording-indicator {
+      display: none;
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background-color: rgba(255, 0, 0, 0.7);
+      padding: 5px 10px;
+      border-radius: 4px;
+      align-items: center;
+      font-weight: bold;
+    }
+    .recording-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      background-color: red;
+      border-radius: 50%;
+      margin-right: 5px;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.3; }
+      100% { opacity: 1; }
+    }
+    .strong-highlight {
+      color: #F44336;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="recording-indicator" id="status-indicator">
+    <span class="recording-dot"></span>
+    <span id="status-text"><%= mode === 'record' ? 'RECORDING' : 'STREAMING' %></span>
+  </div>
+
+  <div class="status-container">
+    <h2>TikTok Live Auto-<%= mode === 'record' ? 'Recording' : 'Streaming' %></h2>
+    <p>Monitoring users: <strong><%= users %></strong></p>
+    <p>Status: <span id="live-status">Checking...</span></p>
+    <p>OBS Control: <span id="obs-status">Checking...</span></p>
+  </div>
+
+  <div class="log-container" id="log"></div>
+
+  <script>
+    const USERS = '<%= users %>';
+    const MODE = '<%= mode %>';
+    const serverReloadInterval = <%= reloadInterval !== null ? reloadInterval : 'null' %>;
+    const CHECK_INTERVAL = serverReloadInterval !== null ? serverReloadInterval * 1000 : 10000;
+    const AUTO_RELOAD = serverReloadInterval !== null;
+    
+    const liveStatusEl = document.getElementById('live-status');
+    const obsStatusEl = document.getElementById('obs-status');
+    const logEl = document.getElementById('log');
+    const statusIndicator = document.getElementById('status-indicator');
+    const statusText = document.getElementById('status-text');
+    
+    let obsAvailable = false;
+    let isActive = false;
+    let liveUsers = [];
+    let checkTimer = null;
+    let reloadTimer = null;
+    
+    function log(message, type = 'info') {
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      
+      const timestamp = document.createElement('span');
+      timestamp.className = 'timestamp';
+      timestamp.textContent = `[${new Date().toLocaleTimeString()}] `;
+      
+      const content = document.createElement('span');
+      content.className = type;
+      content.textContent = message;
+      
+      entry.appendChild(timestamp);
+      entry.appendChild(content);
+      
+      logEl.appendChild(entry);
+      logEl.scrollTop = logEl.scrollHeight;
+      
+      console.log(`[${type}] ${message}`);
+    }
+    
+    function checkOBS() {
+      if (window.obsstudio) {
+        obsAvailable = true;
+        obsStatusEl.textContent = 'Available';
+        log('OBS Studio controls detected and ready', 'success');
+        
+        if (window.obsstudio.getVersion) {
+          try {
+            const version = window.obsstudio.getVersion();
+            log(`OBS Studio version: ${version}`, 'info');
+          } catch (error) {
+            log(`Error getting OBS version: ${error.message}`, 'error');
+          }
+        }
+        
+        if (MODE === 'record' && window.obsstudio.isRecording) {
+          try {
+            isActive = window.obsstudio.isRecording();
+            updateStatus();
+          } catch (error) {
+            log(`Error checking recording status: ${error.message}`, 'error');
+          }
+        } else if (MODE === 'stream' && window.obsstudio.isStreaming) {
+          try {
+            isActive = window.obsstudio.isStreaming();
+            updateStatus();
+          } catch (error) {
+            log(`Error checking streaming status: ${error.message}`, 'error');
+          }
+        }
+      } else {
+        obsAvailable = false;
+        obsStatusEl.textContent = 'Not Available';
+        log('OBS Studio controls not detected. Make sure this page is loaded in an OBS Browser Source with "Full access to OBS" permission enabled.', 'error');
+        
+        const errorMsg = document.createElement('div');
+        errorMsg.className = 'log-entry';
+        errorMsg.innerHTML = '<span class="timestamp">[' + new Date().toLocaleTimeString() + '] </span>' +
+          '<span class="error">Important: You need to select <span class="strong-highlight">"Full access to OBS (Start/Stop streaming without warning, etc.)"</span> in the browser source properties.</span>';
+        logEl.appendChild(errorMsg);
+      }
+    }
+    
+    function startOBS() {
+      if (!obsAvailable) return;
+      
+      try {
+        if (MODE === 'record' && window.obsstudio.startRecording) {
+          window.obsstudio.startRecording();
+          isActive = true;
+          log('Recording started', 'success');
+        } else if (MODE === 'stream' && window.obsstudio.startStreaming) {
+          window.obsstudio.startStreaming();
+          isActive = true;
+          log('Streaming started', 'success');
+        } else {
+          log(`start${MODE === 'record' ? 'Recording' : 'Streaming'} function not available in this OBS version`, 'error');
+        }
+        updateStatus();
+      } catch (error) {
+        log(`Error starting ${MODE}: ${error.message}`, 'error');
+      }
+    }
+    
+    function stopOBS() {
+      if (!obsAvailable) return;
+      
+      try {
+        if (MODE === 'record' && window.obsstudio.stopRecording) {
+          window.obsstudio.stopRecording();
+          isActive = false;
+          log('Recording stopped', 'warning');
+        } else if (MODE === 'stream' && window.obsstudio.stopStreaming) {
+          window.obsstudio.stopStreaming();
+          isActive = false;
+          log('Streaming stopped', 'warning');
+        } else {
+          log(`stop${MODE === 'record' ? 'Recording' : 'Streaming'} function not available in this OBS version`, 'error');
+        }
+        updateStatus();
+      } catch (error) {
+        log(`Error stopping ${MODE}: ${error.message}`, 'error');
+      }
+    }
+    
+    function updateStatus() {
+      if (isActive) {
+        statusIndicator.style.display = 'flex';
+      } else {
+        statusIndicator.style.display = 'none';
+      }
+    }
+    
+    async function checkLiveUsers() {
+      try {
+        const response = await fetch(`/check?users=${USERS}`);
+        const text = await response.text();
+        
+        const newLiveUsers = text ? text.split(',') : [];
+        liveStatusEl.textContent = newLiveUsers.length > 0 
+          ? `Live: ${newLiveUsers.join(', ')}` 
+          : 'No users are live';
+        
+        log(`Checked live status: ${newLiveUsers.length > 0 ? newLiveUsers.join(', ') + ' are live' : 'No users are live'}`);
+        
+        if (newLiveUsers.length > 0 && !isActive) {
+          log(`Users are live: ${newLiveUsers.join(', ')}`, 'success');
+          startOBS();
+        } else if (newLiveUsers.length === 0 && isActive) {
+          log('No users are live anymore, stopping', 'warning');
+          stopOBS();
+        }
+        
+        liveUsers = newLiveUsers;
+      } catch (error) {
+        log(`Error checking live status: ${error.message}`, 'error');
+      }
+    }
+    
+    function setupPageReload() {
+      if (AUTO_RELOAD) {
+        const reloadInterval = CHECK_INTERVAL;
+        log(`Auto-reload enabled. Page will reload every ${reloadInterval/1000} seconds`, 'info');
+        
+        reloadTimer = setTimeout(() => {
+          log('Reloading page...', 'info');
+          window.location.reload();
+        }, reloadInterval);
+      }
+    }
+    
+    window.addEventListener('load', () => {
+      log('Page loaded, initializing...', 'info');
+      log(`Mode: Auto-${MODE === 'record' ? 'Recording' : 'Streaming'}`, 'info');
+      log(`Monitoring users: ${USERS}`, 'info');
+      log(`Check interval: ${CHECK_INTERVAL/1000} seconds`, 'info');
+      
+      setTimeout(checkOBS, 500);
+      
+      log('Starting periodic check every ' + (CHECK_INTERVAL/1000) + ' seconds', 'info');
+      checkLiveUsers();
+      
+      checkTimer = setInterval(checkLiveUsers, CHECK_INTERVAL);
+      
+      setupPageReload();
+    });
+  </script>
+</body>
+</html> 
